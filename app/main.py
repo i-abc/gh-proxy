@@ -3,20 +3,15 @@ import re
 
 import requests
 from flask import Flask, Response, redirect, request
-from requests.exceptions import (
-    ChunkedEncodingError,
-    ContentDecodingError, ConnectionError, StreamConsumedError)
-from requests.utils import (
-    stream_decode_response_unicode, iter_slices, CaseInsensitiveDict)
-from urllib3.exceptions import (
-    DecodeError, ReadTimeoutError, ProtocolError)
+from requests.exceptions import (ChunkedEncodingError, ContentDecodingError, ConnectionError, StreamConsumedError)
+from requests.utils import (stream_decode_response_unicode, iter_slices, CaseInsensitiveDict)
+from urllib3.exceptions import (DecodeError, ReadTimeoutError, ProtocolError)
 from urllib.parse import quote
 
 # config
 # 分支文件使用jsDelivr镜像的开关，0为关闭，默认关闭
 jsdelivr = 0
 size_limit = 1024 * 1024 * 1024 * 999  # 允许的文件大小，默认999GB，相当于无限制了 https://github.com/hunshcn/gh-proxy/issues/8
-
 """
   先生效白名单再匹配黑名单，pass_list匹配到的会直接302到jsdelivr而忽略设置
   生效顺序 白->黑->pass，可以前往https://github.com/hunshcn/gh-proxy/issues/41 查看示例
@@ -48,6 +43,8 @@ exp2 = re.compile(r'^(?:https?://)?github\.com/(?P<author>.+?)/(?P<repo>.+?)/(?:
 exp3 = re.compile(r'^(?:https?://)?github\.com/(?P<author>.+?)/(?P<repo>.+?)/(?:info|git-).*$')
 exp4 = re.compile(r'^(?:https?://)?raw\.(?:githubusercontent|github)\.com/(?P<author>.+?)/(?P<repo>.+?)/.+?/.+$')
 exp5 = re.compile(r'^(?:https?://)?gist\.(?:githubusercontent|github)\.com/(?P<author>.+?)/.+?/.+$')
+exp6 = re.compile(r'^(?:https?://)?install\.speedtest\.net/app/cli/ookla-speedtest-(.+)\.tgz$')
+exp7 = re.compile(r'^(?:https?://)?cdn\.geekbench\.com/Geekbench-(.+)\.tar\.gz$')
 
 requests.sessions.default_headers = lambda: CaseInsensitiveDict()
 
@@ -107,7 +104,7 @@ def iter_content(self, chunk_size=1, decode_unicode=False):
 
 
 def check_url(u):
-    for exp in (exp1, exp2, exp3, exp4, exp5):
+    for exp in (exp1, exp2, exp3, exp4, exp5, exp6, exp7):
         m = exp.match(u)
         if m:
             return m
@@ -168,7 +165,12 @@ def proxy(u, allow_redirects=False):
         url = u + request.url.replace(request.base_url, '', 1)
         if url.startswith('https:/') and not url.startswith('https://'):
             url = 'https://' + url[7:]
-        r = requests.request(method=request.method, url=url, data=request.data, headers=r_headers, stream=True, allow_redirects=allow_redirects)
+        r = requests.request(method=request.method,
+                             url=url,
+                             data=request.data,
+                             headers=r_headers,
+                             stream=True,
+                             allow_redirects=allow_redirects)
         headers = dict(r.headers)
 
         if 'Content-length' in r.headers and int(r.headers['Content-length']) > size_limit:
@@ -189,6 +191,7 @@ def proxy(u, allow_redirects=False):
     except Exception as e:
         headers['content-type'] = 'text/html; charset=UTF-8'
         return Response('server error ' + str(e), status=500, headers=headers)
+
 
 app.debug = True
 if __name__ == '__main__':
